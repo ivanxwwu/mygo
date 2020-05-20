@@ -9,6 +9,10 @@ import (
 	"unsafe"
 )
 
+//https://www.jianshu.com/p/2904efc7f1a8
+//https://studygolang.com/articles/22991?fr=sidebar
+
+
 type SA1 struct {
 	A int
 	B int
@@ -203,6 +207,21 @@ func TestReplaceFunc(t *testing.T) {
 
 }
 
-func TestReplaceMethod(t *testing.T) {
+type STM struct {
 
+}
+
+func (_ *STM) fn(a int) int {
+	return a+10
+}
+
+func TestReplaceMethod(t *testing.T) {
+	mockTarget := reflect.TypeOf(&STM{})
+	methodName := "Fn"
+
+	m, ok := mockTarget.MethodByName(methodName)
+	if !ok {
+		panic("retrieve method by name failed")
+	}
+	fmt.Println(m)
 }
