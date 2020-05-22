@@ -2,6 +2,7 @@ package access_private
 
 import (
 	"fmt"
+	"github.com/agiledragon/gomonkey"
 	"github.com/ivanxwwu/mygo/access_private/other1"
 	_ "github.com/ivanxwwu/mygo/access_private/other1"
 	"testing"
@@ -57,6 +58,9 @@ var private_member map[int]string
 func TestPrivateFunc(t *testing.T) {
 	private_func()
 	p := &other1.PublicStruct{I:1}
+	gomonkey.ApplyFunc(pulibc_struct_private_func, func(p *other1.PublicStruct, a int){
+		fmt.Printf("fuk!\n")
+	})
 	pulibc_struct_private_func(p, 100)
 	fmt.Printf("private_member:%v\n",  private_member)
 }
