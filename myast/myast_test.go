@@ -240,4 +240,191 @@ func TestDemo2(t *testing.T) {
 }
 
 
+func TestDemo3(t *testing.T) {
+	fset := token.NewFileSet()
+	// 这里取绝对路径，方便打印出来的语法树可以转跳到编辑器
+	path, _ := filepath.Abs("/root/goworkspace/nfa_autotest/nfa_gotests/example/example_test.go")
+	f, err := parser.ParseFile(fset, path, nil, parser.AllErrors)
+	if err != nil {
+		log.Println(err)
+	}
+	ast.Print(fset, f)
+}
+
+
+
+func TestImports(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "./sample/ast_traversal.go", nil, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+
+	for _, i := range f.Imports {
+		t.Logf("import:	%s", i.Path.Value)
+	}
+
+	return
+}
+
+func TestComments(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "./sample/ast_traversal.go", nil, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+
+	for _, i := range f.Comments {
+		t.Logf("comment:	%s", i.Text())
+	}
+
+	return
+}
+
+func TestFunctions(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "./sample/ast_traversal.go", nil, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+
+	for _, i := range f.Decls {
+		fn, ok := i.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		t.Logf("function:	%s", fn.Name.Name)
+	}
+
+	return
+}
+
+func TestInspect(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "./sample/ast_traversal.go", nil, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+
+	ast.Inspect(f, func(n ast.Node) bool {
+		// Find Return Statements
+		ret, ok := n.(*ast.ReturnStmt)
+		if ok {
+			t.Logf("return statement found on line %d:\n\t", fset.Position(ret.Pos()).Line)
+			printer.Fprint(os.Stdout, fset, ret)
+			return true
+		}
+
+		// Find Functions
+		fn, ok := n.(*ast.FuncDecl)
+		if ok {
+			var exported string
+			if fn.Name.IsExported() {
+				exported = "exported "
+			}
+			t.Logf("%sfunction declaration found on line %d: %s", exported, fset.Position(fn.Pos()).Line, fn.Name.Name)
+			return true
+		}
+
+		return true
+	})
+
+	return
+}
+
+//https://studygolang.com/articles/24311
+// Visitor
+type Visitor struct {
+}
+
+
+func (v *Visitor) Visit(node ast.Node) ast.Visitor {
+	switch node.(type) {
+	case *ast.GenDecl:
+		genDecl := node.(*ast.GenDecl)
+		// 查找有没有import context包
+		// Notice：没有考虑没有import任何包的情况
+		if genDecl.Tok == token.IMPORT {
+			v.addImport(genDecl)
+			// 不需要再遍历子树
+			return nil
+		}
+	case *ast.InterfaceType:
+		// 遍历所有的接口类型
+		iface := node.(*ast.InterfaceType)
+		addContext(iface)
+		// 不需要再遍历子树
+		return nil
+	}
+	return v
+}
+
+// addImport 引入context包
+func (v *Visitor) addImport(genDecl *ast.GenDecl) {
+	// 是否已经import
+	hasImported := false
+	for _, v := range genDecl.Specs {
+		imptSpec := v.(*ast.ImportSpec)
+		// 如果已经包含"context"
+		if imptSpec.Path.Value == strconv.Quote("context") {
+			hasImported = true
+		}
+	}
+	// 如果没有import context，则import
+	if !hasImported {
+		genDecl.Specs = append(genDecl.Specs, &ast.ImportSpec{
+			Path: &ast.BasicLit{
+				Kind:  token.STRING,
+				Value: strconv.Quote("context"),
+			},
+		})
+	}
+}
+
+// addContext 添加context参数
+func addContext(iface *ast.InterfaceType) {
+	// 接口方法不为空时，遍历接口方法
+	if iface.Methods != nil || iface.Methods.List != nil {
+		for _, v := range iface.Methods.List {
+			ft := v.Type.(*ast.FuncType)
+			hasContext := false
+			// 判断参数中是否包含context.Context类型
+			for _, v := range ft.Params.List {
+				if expr, ok := v.Type.(*ast.SelectorExpr); ok {
+					if ident, ok := expr.X.(*ast.Ident); ok {
+						if ident.Name == "context" {
+							hasContext = true
+						}
+					}
+				}
+			}
+			// 为没有context参数的方法添加context参数
+			if !hasContext {
+				ctxField := &ast.Field{
+					Names: []*ast.Ident{
+						ast.NewIdent("ctx"),
+					},
+					// Notice: 没有考虑import别名的情况
+					Type: &ast.SelectorExpr{
+						X:   ast.NewIdent("context"),
+						Sel: ast.NewIdent("Context"),
+					},
+				}
+				list := []*ast.Field{
+					ctxField,
+				}
+				ft.Params.List = append(list, ft.Params.List...)
+			}
+		}
+	}
+}
+
+func TestWalk(t *testing.T) {
+
+}
+
 //https://cloud.tencent.com/developer/section/1142075
