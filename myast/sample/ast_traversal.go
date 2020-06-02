@@ -16,3 +16,12 @@ type Example2 struct {
 func PrintHello(){
 	fmt.Println("Hello World")
 }
+
+func Fn1() int32 {
+	return int32(0) + 3
+}
+
+func Fn2() int32 {
+	a := Fn1() + 3
+	return a
+}

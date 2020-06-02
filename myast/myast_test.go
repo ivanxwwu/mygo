@@ -138,12 +138,38 @@ func (v *Visitor) Visit(node ast.Node) ast.Visitor {
 		addContext(iface)
 		// 不需要再遍历子树
 		return nil
+	case *ast.Ident:
+		ident := node.(*ast.Ident)
+		fmt.Printf("%+v", ident)
 	}
+
 	return v
 }
 
 // addImport 引入context包
 func (v *Visitor) addImport(genDecl *ast.GenDecl) {
+	// 是否已经import
+	hasImported := false
+	for _, v := range genDecl.Specs {
+		imptSpec := v.(*ast.ImportSpec)
+		// 如果已经包含"context"
+		if imptSpec.Path.Value == strconv.Quote("context") {
+			hasImported = true
+		}
+	}
+	// 如果没有import context，则import
+	if !hasImported {
+		genDecl.Specs = append(genDecl.Specs, &ast.ImportSpec{
+			Path: &ast.BasicLit{
+				Kind:  token.STRING,
+				Value: strconv.Quote("context"),
+			},
+		})
+	}
+}
+
+// addImport 引入context包
+func AddImport(genDecl *ast.GenDecl) {
 	// 是否已经import
 	hasImported := false
 	for _, v := range genDecl.Specs {
@@ -225,6 +251,7 @@ func TestDemo2(t *testing.T) {
 	if err != nil {
 		log.Println(err)
 	}
+	ast.Print(fset, f)
 	v := Visitor{}
 	ast.Walk(&v, f)
 
@@ -304,14 +331,23 @@ func TestFunctions(t *testing.T) {
 
 func TestInspect(t *testing.T) {
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, "./sample/ast_traversal.go", nil, parser.ParseComments)
+	f, err := parser.ParseFile(fset, "./sample/demo.go", nil, parser.ParseComments)
 	if err != nil {
 		t.Fatal(err)
 		return
 	}
 
+	//ast.Print(fset, f)
+
 	ast.Inspect(f, func(n ast.Node) bool {
 		// Find Return Statements
+		gen, ok := n.(*ast.GenDecl)
+		if ok {
+			t.Logf("return GenDecl found on line %d:\n\t", fset.Position(gen.Pos()).Line)
+			if gen.Tok == token.IMPORT {
+				AddImport(gen)
+			}
+		}
 		ret, ok := n.(*ast.ReturnStmt)
 		if ok {
 			t.Logf("return statement found on line %d:\n\t", fset.Position(ret.Pos()).Line)
@@ -330,101 +366,109 @@ func TestInspect(t *testing.T) {
 			return true
 		}
 
+		call, ok := n.(*ast.CallExpr)
+		if ok {
+			t.Logf("call:%+v", call)
+		}
+
 		return true
 	})
+
+	var output []byte
+	buffer := bytes.NewBuffer(output)
+	err = format.Node(buffer, fset, f)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// 输出Go代码
+	fmt.Println(buffer.String())
 
 	return
 }
 
-//https://studygolang.com/articles/24311
-// Visitor
-type Visitor struct {
-}
 
-
-func (v *Visitor) Visit(node ast.Node) ast.Visitor {
-	switch node.(type) {
-	case *ast.GenDecl:
-		genDecl := node.(*ast.GenDecl)
-		// 查找有没有import context包
-		// Notice：没有考虑没有import任何包的情况
-		if genDecl.Tok == token.IMPORT {
-			v.addImport(genDecl)
-			// 不需要再遍历子树
-			return nil
-		}
-	case *ast.InterfaceType:
-		// 遍历所有的接口类型
-		iface := node.(*ast.InterfaceType)
-		addContext(iface)
-		// 不需要再遍历子树
-		return nil
+func TestGomonkey(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "./sample/demo.go", nil, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+		return
 	}
-	return v
-}
 
-// addImport 引入context包
-func (v *Visitor) addImport(genDecl *ast.GenDecl) {
-	// 是否已经import
-	hasImported := false
-	for _, v := range genDecl.Specs {
-		imptSpec := v.(*ast.ImportSpec)
-		// 如果已经包含"context"
-		if imptSpec.Path.Value == strconv.Quote("context") {
-			hasImported = true
-		}
-	}
-	// 如果没有import context，则import
-	if !hasImported {
-		genDecl.Specs = append(genDecl.Specs, &ast.ImportSpec{
-			Path: &ast.BasicLit{
-				Kind:  token.STRING,
-				Value: strconv.Quote("context"),
-			},
-		})
-	}
-}
-
-// addContext 添加context参数
-func addContext(iface *ast.InterfaceType) {
-	// 接口方法不为空时，遍历接口方法
-	if iface.Methods != nil || iface.Methods.List != nil {
-		for _, v := range iface.Methods.List {
-			ft := v.Type.(*ast.FuncType)
-			hasContext := false
-			// 判断参数中是否包含context.Context类型
-			for _, v := range ft.Params.List {
-				if expr, ok := v.Type.(*ast.SelectorExpr); ok {
-					if ident, ok := expr.X.(*ast.Ident); ok {
-						if ident.Name == "context" {
-							hasContext = true
-						}
-					}
-				}
+	ast.Inspect(f, func(n ast.Node) bool {
+		// Find Return Statements
+		gen, ok := n.(*ast.GenDecl)
+		if ok {
+			if gen.Tok != token.VAR {
+				return false
 			}
-			// 为没有context参数的方法添加context参数
-			if !hasContext {
-				ctxField := &ast.Field{
-					Names: []*ast.Ident{
-						ast.NewIdent("ctx"),
-					},
-					// Notice: 没有考虑import别名的情况
-					Type: &ast.SelectorExpr{
-						X:   ast.NewIdent("context"),
-						Sel: ast.NewIdent("Context"),
-					},
-				}
-				list := []*ast.Field{
-					ctxField,
-				}
-				ft.Params.List = append(list, ft.Params.List...)
+			if len(gen.Specs) < 1 {
+				return false
 			}
+			spec := gen.Specs[0]
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				return false
+			}
+			if len(vs.Names) < 1 || vs.Names[0].Name != "mocks" {
+				return false
+			}
+
+			if len(vs.Values) < 1 {
+				return false
+			}
+			fnDecl, ok := vs.Values[0].(*ast.FuncLit)
+			if !ok {
+				return false
+			}
+			if len(fnDecl.Type.Results.List) < 1 {
+				return false
+			}
+			retType, ok := fnDecl.Type.Results.List[0].Type.(*ast.ArrayType)
+			if !ok {
+				return false
+			}
+			sexpr, ok := retType.Elt.(*ast.StarExpr)
+			if !ok {
+				return false
+			}
+			selexpr, ok := sexpr.X.(*ast.SelectorExpr)
+			if !ok {
+				return false
+			}
+			pack, ok := selexpr.X.(*ast.Ident)
+			if !ok {
+				return false
+			}
+			if pack.Name != "gomonkey" || selexpr.Sel.Name != "Patches" {
+				return false
+			}
+			t.Logf("return GenDecl found on line %d %+v:\n\t", fset.Position(gen.Pos()).Line, gen)
+			var output []byte
+			buf := bytes.NewBuffer(output)
+			err = format.Node(buf, fset, gen)
+			t.Logf(buf.String())
+			//ast.Inspect(gen, func(n ast.Node) bool {
+			//
+			//	return true
+			//})
+			//if gen.Tok == token.IMPORT {
+			//	AddImport(gen)
+			//}
 		}
+		return true
+	})
+
+	var output []byte
+	buffer := bytes.NewBuffer(output)
+	err = format.Node(buffer, fset, f)
+	if err != nil {
+		log.Fatal(err)
 	}
+
+	// 输出Go代码
+	fmt.Println(buffer.String())
+
+	return
 }
-
-func TestWalk(t *testing.T) {
-
-}
-
-//https://cloud.tencent.com/developer/section/1142075
