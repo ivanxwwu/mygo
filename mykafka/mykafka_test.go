@@ -90,6 +90,77 @@ func TestComsumerGroup(t *testing.T) {
 	}
 }
 
+func TestComsumerGroup2(t *testing.T) {
+	assignor := "sticky"
+	brokers := "192.168.182.132:9092"
+	group := "group1"
+	topics := "sun"
+	oldest := true
+	log.Println("start new sarama consumer!")
+	sarama.Logger = log.New(os.Stdout, "[sarama] ", log.LstdFlags)
+	version, err := sarama.ParseKafkaVersion("2.1.1")
+	if err != nil {
+		log.Panicf("error parsing kafka version:%v", err)
+	}
+	config := sarama.NewConfig()
+	config.Version = version
+
+	if oldest {
+		config.Consumer.Offsets.Initial = sarama.OffsetOldest
+	}
+	switch assignor {
+	case "sticky":
+		config.Consumer.Group.Rebalance.Strategy = sarama.BalanceStrategySticky
+	case "roundrobin":
+		config.Consumer.Group.Rebalance.Strategy = sarama.BalanceStrategyRoundRobin
+	case "range":
+		config.Consumer.Group.Rebalance.Strategy = sarama.BalanceStrategyRange
+	default:
+		log.Panicf("Unrecognized consumer group partition assignor: %s", assignor)
+	}
+
+	consumer := Consumer{
+		ready: make(chan bool),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client, err := sarama.NewConsumerGroup(strings.Split(brokers, ","), group, config)
+	if err != nil {
+		log.Panicf("Error creating consumer group client: %v", err)
+	}
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			if err := client.Consume(ctx, strings.Split(topics, ","), &consumer); err != nil {
+				log.Panicf("Error from consumer: %v", err)
+			}
+			if ctx.Err() != nil {
+				return
+			}
+			consumer.ready = make(chan bool)
+		}
+	}()
+
+	<-consumer.ready // Await till the consumer has been set up
+	log.Println("Sarama consumer up and running!...")
+	sigterm := make(chan os.Signal, 1)
+	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case <-ctx.Done():
+		log.Println("terminating: context cancelled")
+	case <-sigterm:
+		log.Println("terminating: via signal")
+	}
+	cancel()
+	wg.Wait()
+	if err = client.Close(); err != nil {
+		log.Panicf("Error closing client: %v", err)
+	}
+}
+
 // Consumer represents a Sarama consumer group consumer
 type Consumer struct {
 	ready chan bool
@@ -109,11 +180,6 @@ func (consumer *Consumer) Cleanup(sarama.ConsumerGroupSession) error {
 
 // ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages().
 func (consumer *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-
-	// NOTE:
-	// Do not move the code below to a goroutine.
-	// The `ConsumeClaim` itself is called within a goroutine, see:
-	// https://github.com/Shopify/sarama/blob/master/consumer_group.go#L27-L29
 	for message := range claim.Messages() {
 		log.Printf("Message claimed: value = %s, timestamp = %v, topic = %s", string(message.Value), message.Timestamp, message.Topic)
 		session.MarkMessage(message, "")
@@ -143,7 +209,7 @@ func TestProducer(t *testing.T) {
 		//创建消息
 		msg := &sarama.ProducerMessage{}
 		msg.Topic = "sun"
-		msg.Value = sarama.StringEncoder("this is a good test,hello chaoge!!")
+		msg.Value = sarama.StringEncoder(fmt.Sprintf("this is a good test,hello chaoge!! %d",n) )
 		//发送消息
 		pid, offset, err := client.SendMessage(msg)
 		if err != nil {
