@@ -10,6 +10,7 @@ require (
 	github.com/google/go-cmp v0.4.1 // indirect
 	github.com/goraft/raft v0.0.0-20150509002813-0061b6c82526 // indirect
 	github.com/jinzhu/gorm v1.9.12
+	github.com/spaolacci/murmur3 v1.1.0
 	github.com/stretchr/testify v1.5.1
 	google.golang.org/protobuf v1.23.0
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect

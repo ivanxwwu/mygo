@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/Shopify/sarama"
+	"github.com/spaolacci/murmur3"
 	"log"
 	"os"
 	"os/signal"
@@ -153,4 +154,8 @@ func TestProducer(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 
 	}
+}
+
+func TestSum32(t *testing.T) {
+	fmt.Printf("sum32:%d", murmur3.Sum32([]byte("3")))
 }
