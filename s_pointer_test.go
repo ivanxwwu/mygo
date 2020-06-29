@@ -2,6 +2,8 @@ package mygo
 
 import (
 	"fmt"
+	"github.com/stretchr/testify/assert"
+	"reflect"
 	"testing"
 	"unsafe"
 )
@@ -37,4 +39,13 @@ func TestPointer3(t *testing.T) {
 		uintptr(unsafe.Pointer(&x)) + unsafe.Offsetof(x.b)))
 	*pb = 42
 	fmt.Println(x.b) // "42"
+}
+
+func TestPointer4(t *testing.T) {
+	src := []byte{1,2,3,4,5,6,7,8}
+
+	dst := *(*[]int8)(unsafe.Pointer(&src))
+
+	assert.Equal(t, true, reflect.DeepEqual([]int8{1,2,3,4,5,6,7,8}, dst))
+
 }

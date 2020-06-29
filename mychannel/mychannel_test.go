@@ -172,3 +172,43 @@ func TestSync(t *testing.T) {
 	// 等待任务完成
 	<-done
 }
+
+func fn1(errorC <-chan error) {
+
+}
+
+func fn2(errorC <-chan error, done chan bool) {
+	time.Sleep(time.Second)
+	done <- true
+}
+
+func TestError(t *testing.T) {
+	errorC := make(chan error)
+	done := make(chan bool)
+	go fn1(errorC)
+	go fn2(errorC, done)
+	<-done
+
+}
+
+func TestMemLost(t *testing.T) {
+	doWork := func(strings <-chan string) <-chan interface {} {
+		completed := make(chan interface{})
+		go func() {
+			defer fmt.Println("doWork exited.")
+			defer close(completed)
+			for s := range strings{
+				//做一些有趣的事
+				fmt.Println(s)
+			}
+			fmt.Println(11)
+		}()
+		return completed
+	}
+	for i:=0; i<1000000; i++ {
+		doWork(nil)
+	}
+
+	//也许这里有其他操作需要执行
+
+}

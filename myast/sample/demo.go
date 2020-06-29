@@ -22,6 +22,7 @@ func Fnf2(a int) int {
 	return Fnf1(a+3)
 }
 
+
 // main方法
 func main() {
 	var mocks = func() []*gomonkey.Patches {
