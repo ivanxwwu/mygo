@@ -1,15 +1,15 @@
 package main
 
 import (
-	"net/http"
-	"runtime"
-	"os"
 	"fmt"
-	"runtime/trace"
-	_"net/http/pprof"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+	"runtime"
 	"runtime/debug"
-	"time"
+	"runtime/trace"
 	"sync"
+	"time"
 )
 
 func main() {

@@ -2,8 +2,8 @@ package mygo
 
 import (
 	"bytes"
-	"crypto/md5"
 	"fmt"
+	"github.com/agiledragon/gomonkey"
 	_ "github.com/ivanxwwu/mygo/sample"
 	"testing"
 )
@@ -137,12 +137,13 @@ func (st *SA) WupTypeName() string {
 
 `
 
+func fn3() int{
+	return 3
+}
 
 func TestSample(t *testing.T) {
-	str := "123456"
-	//方法一
-	data := []byte(str)
-	has := md5.Sum(data)
-	md5str1 := fmt.Sprintf("%x", has) //将[]byte转成16进制
-	fmt.Println(md5str1)
+	gomonkey.ApplyFunc(fn3, func() int {
+		return 4
+	})
+	fmt.Println(fn3())
 }
